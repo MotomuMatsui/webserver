@@ -1,0 +1,44 @@
+# Version control
+.git
+.gitignore
+
+# Editor / OS
+.DS_Store
+.vscode
+.idea
+*.swp
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+.venv
+venv
+
+# Pre-built host-platform binaries (will be rebuilt in the Linux container).
+# These leak in if the user has previously run `make` on the host (macOS),
+# producing Mach-O objects/archives that the Linux build then trips over
+# (e.g. ranlib: "malformed archive" when a stale macOS .a is reused).
+gs/gs2
+gs/gs2_gpu
+gs/MMseqs2/
+gs/lapack-3.12.1/
+gs/lib/*.a
+gs/lib/*.so
+gs/lib/*.dylib
+gs/**/*.o
+panjep/panjep
+panjep/panjep_asan.dSYM
+panjep/**/*.o
+sj/sj
+sj/**/*.o
+
+# Old directories kept around on the host but never used by the image.
+gs2.6.old/
+panjep3.old/
+sj.old/
+
+# Claude config (local only)
+.claude
+*/.claude

@@ -1,0 +1,72 @@
+{% extends 'base.html' %}
+{% block title %}{{ tool.short_name }} &mdash; Phylogenetics Toolbox{% endblock %}
+{% block content %}
+<h1>{{ tool.name }}</h1>
+<p class="lead">{{ tool.description }}</p>
+
+{% if error %}
+  <div class="err"><strong>Error:</strong> {{ error }}</div>
+{% endif %}
+
+<form method="post" class="tool-form">
+  <label for="input">Input data</label>
+  {% if tool.input_help %}<div class="note">{{ tool.input_help }}</div>{% endif %}
+  <textarea id="input" name="input" required>{{ input_text }}</textarea>
+
+  {% if tool.fields %}
+  <div class="fields">
+    {% for f in tool.fields %}
+    <div class="field">
+      <label for="f-{{ f.name }}">{{ f.label }}</label>
+      {{ f.render(values.get(f.name))|safe }}
+      {% if f.help %}<div class="note">{{ f.help }}</div>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <button type="submit">Run</button>
+</form>
+
+{% if result %}
+  <hr>
+  {% if result.returncode != 0 %}
+    <div class="err">
+      <strong>{{ tool.short_name }} exited with code {{ result.returncode }}</strong>
+      {% if result.stderr %}<pre>{{ result.stderr }}</pre>{% endif %}
+    </div>
+  {% else %}
+    {% if result.svg %}
+      <h2>Tree visualization</h2>
+      <div class="svg-wrap">{{ result.svg|safe }}</div>
+    {% elif result.viz_error %}
+      <div class="err">Tree could not be rendered: {{ result.viz_error }}</div>
+    {% endif %}
+
+    {% if result.ascii %}
+      <h2>ASCII tree</h2>
+      <pre class="ascii">{{ result.ascii }}</pre>
+    {% endif %}
+
+    <h2>Newick output</h2>
+    <pre class="newick">{{ result.stdout }}</pre>
+
+    {% if result.run_id %}
+      <h2>Run ID</h2>
+      <p><code>{{ result.run_id }}</code></p>
+      <h2>Saved Newick file{% if result.tree_files|length > 1 %}s{% endif %}</h2>
+      <ul>
+        {% for f in result.tree_files %}
+        <li><a href="{{ f.url }}">{{ f.name }}</a></li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+
+    {% if result.stderr %}
+      <h2>Log (stderr)</h2>
+      <pre>{{ result.stderr }}</pre>
+    {% endif %}
+  {% endif %}
+  <p class="note">Command: <code>{{ result.command }}</code></p>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>{% block title %}Top page{% endblock %}</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  </head>
+  <body>
+    <header>
+      <nav>
+	<a href="{{ url_for('index') }}" class="brand">Top page</a>
+	<span class="spacer"></span>
+	{% for t in tools %}
+	<a href="{{ url_for('tool_view', slug=t.slug) }}">{{ t.short_name }}</a>
+	{% endfor %}
+      </nav>
+    </header>
+    <main>
+      {% block content %}{% endblock %}
+    </main>
+    <footer>
+      Copyright &copy;
+      <a href="https://www.bic.kyoto-u.ac.jp/">Bioinformatics Center</a>,
+      <a href="https://www.kuicr.kyoto-u.ac.jp/sites/icr/">Institute for Chemical Research</a>,
+      <a href="https://www.kyoto-u.ac.jp/en">Kyoto University</a>,
+      Japan
+    </footer>
+  </body>
+</html>
+
+
+
+

@@ -1,0 +1,5 @@
+Flask>=1.1
+ete3>=3.1
+# ete3 imports six at module load (via ncbi_taxonomy) but does not declare it.
+six>=1.16
+numpy
