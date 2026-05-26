@@ -53,7 +53,7 @@ def render_tree_svg(newick: str) -> Tuple[Optional[str], Optional[str]]:
     ts.branch_vertical_margin = 6
 
     base_style = NodeStyle()
-    base_style["size"] = 4
+    base_style["size"] = 0
     base_style["fgcolor"] = "#2a6496"
     base_style["hz_line_width"] = 1
     base_style["vt_line_width"] = 1

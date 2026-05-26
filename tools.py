@@ -151,6 +151,12 @@ class BoolField(Field):
 
 
 @dataclass
+class Sample:
+    label: str  # text shown inside the link, e.g. "sample" or "sample matrix"
+    path: str   # path relative to BASE_DIR, e.g. "samples/gs.faa"
+
+
+@dataclass
 class ToolSpec:
     slug: str
     name: str
@@ -162,6 +168,7 @@ class ToolSpec:
     extra_args: List[str] = dc_field(default_factory=list)
     input_help: str = ""
     timeout: int = 300
+    samples: List[Sample] = dc_field(default_factory=list)
 
     def build_command(self, parsed: dict) -> List[str]:
         args: List[str] = [self.binary]
@@ -173,6 +180,19 @@ class ToolSpec:
     def default_values(self) -> dict:
         return {f.name: f.default for f in self.fields}
 
+    def sample_content(self, index: int) -> Optional[str]:
+        if index < 0 or index >= len(self.samples):
+            return None
+        path = os.path.join(BASE_DIR, self.samples[index].path)
+        # Guard against samples escaping BASE_DIR via "..".
+        if not os.path.abspath(path).startswith(os.path.abspath(BASE_DIR) + os.sep):
+            return None
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                return fh.read()
+        except OSError:
+            return None
+
 
 # ---------------------------------------------------------------------------
 # Registry
@@ -183,8 +203,7 @@ GS = ToolSpec(
     name="GS::Graph Splitting Method v2.5",
     short_name="GS",
     description=(
-        "Graph Splitting tree inference from FASTA sequences, distance matrices, "
-        "or similarity matrices."
+        "Graph Splitting is a graph-based phylogenetic tree inference method. As input, it accepts not only nucleotide or amino acid sequences, but also distance matrices and similarity matrices."
     ),
     binary=os.path.join(BASE_DIR, "gs", "gs2"),
     cwd=os.path.join(BASE_DIR, "gs"),
@@ -214,6 +233,7 @@ GS = ToolSpec(
                   default=True),
     ],
     extra_args=["-s"],
+    samples=[Sample(label="sample", path="samples/gs.faa")],
 )
 
 PANJEP = ToolSpec(
@@ -221,7 +241,7 @@ PANJEP = ToolSpec(
     name="PANJEP::PA-based NJ with EP v1.0",
     short_name="PANJEP",
     description=(
-        "(P)airwise (A)lignment-based (N)eighbor-(J)oining tree inference with (E)edge (P)urterbaton branch support."
+        "PANJEP is Pairwise Alignment-based Neighbor Joining with Edge Perturbation. First, instead of using a multiple sequence alignment (MSA), the PANJEP estimates a distance matrix based on all-to-all pairwise alignments. Next, a phylogenetic tree is inferred using the Neighbor-Joining (NJ) method, and the reliability of internal branches is evaluated using the Edge Perturbation (EP) method."
     ),
     binary=os.path.join(BASE_DIR, "panjep", "panjep"),
     cwd=os.path.join(BASE_DIR, "panjep"),
@@ -231,8 +251,9 @@ PANJEP = ToolSpec(
     ),
     fields=[
         IntField("t", "OpenMP threads (-t)", flag="-t",
-                 help="Leave blank to use all cores.",
-                 default=None, min=1, max=4),
+                 help=("Default 1 to keep concurrent web requests fair. "
+                       "Leave blank to use all cores."),
+                 default=1, min=1, max=4),
         FloatField("s", "Search sensitivity (-s)", flag="-s",
                    help=("1.0 – 7.5; FASTA input only. "
                          "Protein → MMseqs2 -s; "
@@ -255,6 +276,10 @@ PANJEP = ToolSpec(
                  default=100, min=0, max=1000),
         BoolField("v", "Print timing / statistics (-v)", flag="-v"),
     ],
+    samples=[
+        Sample(label="sample FASTA", path="samples/panjep.faa"),
+        Sample(label="sample matrix", path="samples/panjep.phy"),
+    ],
 )
 
 SJ = ToolSpec(
@@ -262,8 +287,8 @@ SJ = ToolSpec(
     name="SJ::Splitting and Joining Method v0.1",
     short_name="SJ",
     description=(
-        "Hybrid GS + PANJEP tree inference: each clade is resolved by spectral "
-        "clustering (GS) or neighbor-joining (PANJEP) according to its "
+        "Hybrid GS + PANJEP tree inference: each clade is resolved by "
+        "graph splitting (GS) or neighbor-joining (PANJEP) according to its "
         "similarity-matrix transitivity."
     ),
     binary=os.path.join(BASE_DIR, "sj", "sj"),
@@ -293,6 +318,7 @@ SJ = ToolSpec(
         BoolField("s", "Silent mode (-s)", flag="-s",
                   default=True),
     ],
+    samples=[Sample(label="sample", path="samples/sj.faa")],
 )
 
 TOOLS = {t.slug: t for t in (GS, PANJEP, SJ)}

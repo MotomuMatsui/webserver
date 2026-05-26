@@ -15,13 +15,22 @@ from __future__ import annotations
 import datetime
 import logging
 import os
-import random
 import re
+import secrets
 import shlex
+import signal
 import subprocess
 import tempfile
 
-from flask import Flask, abort, render_template, request, send_from_directory, url_for
+from flask import (
+    Flask,
+    Response,
+    abort,
+    render_template,
+    request,
+    send_from_directory,
+    url_for,
+)
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from tools import TOOLS, BoolField
@@ -31,7 +40,7 @@ logger = logging.getLogger("webserver")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 RESULTS_DIR = os.path.join(BASE_DIR, "results")
-_RE_RUN_ID = re.compile(r"^[0-9]{8}-[0-9]{6}-[0-9]{6}$")
+_RE_RUN_ID = re.compile(r"^[0-9]{8}-[0-9]{6}-[0-9a-f]{12}$")
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50 MB
@@ -129,9 +138,11 @@ def tool_view(slug):
 
 
 def _generate_run_id() -> str:
+    # secrets.token_hex(6) → 12 hex chars (48 bits) from os.urandom, so two
+    # concurrent workers can't collide the way `random.randint` can when both
+    # workers were fork()ed from the same pre-imported parent state.
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    rand = random.randint(0, 999999)
-    return f"{timestamp}-{rand:06d}"
+    return f"{timestamp}-{secrets.token_hex(6)}"
 
 
 def _save_newick_trees(stdout: str) -> tuple[str, list[dict]]:
@@ -142,7 +153,10 @@ def _save_newick_trees(stdout: str) -> tuple[str, list[dict]]:
     """
     run_id = _generate_run_id()
     run_dir = os.path.join(RESULTS_DIR, run_id)
-    os.makedirs(run_dir, exist_ok=True)
+    os.makedirs(RESULTS_DIR, exist_ok=True)
+    # exist_ok=False so a (vanishingly unlikely) run_id collision raises
+    # instead of silently overwriting a prior run's tree files.
+    os.mkdir(run_dir)
 
     trees = [t.strip() for t in stdout.split(";") if t.strip()]
     files: list[dict] = []
@@ -156,6 +170,17 @@ def _save_newick_trees(stdout: str) -> tuple[str, list[dict]]:
             "url": url_for("result_file", run_id=run_id, filename=fname),
         })
     return run_id, files
+
+
+@app.route("/tool/<slug>/sample/<int:index>")
+def tool_sample(slug: str, index: int):
+    tool = TOOLS.get(slug)
+    if tool is None:
+        abort(404)
+    content = tool.sample_content(index)
+    if content is None:
+        abort(404)
+    return Response(content, mimetype="text/plain; charset=utf-8")
 
 
 @app.route("/results/<run_id>/<path:filename>")
@@ -183,15 +208,30 @@ def _execute(tool, cmd, input_text: str) -> dict:
     try:
         full_cmd = list(cmd) + [input_path]
         logger.info("Running: %s", " ".join(shlex.quote(a) for a in full_cmd))
+        # start_new_session=True puts the child in its own process group, so
+        # gs2/sj/panjep's grandchildren (mmseqs, blastn, etc. launched via
+        # system()) can be killed as a unit on timeout. Without this, a
+        # TimeoutExpired only kills the immediate child and the grandchildren
+        # keep burning CPU.
+        proc = subprocess.Popen(
+            full_cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            cwd=tool.cwd,
+            start_new_session=True,
+        )
         try:
-            proc = subprocess.run(
-                full_cmd,
-                capture_output=True,
-                text=True,
-                timeout=tool.timeout,
-                cwd=tool.cwd,
-            )
+            stdout, stderr = proc.communicate(timeout=tool.timeout)
         except subprocess.TimeoutExpired:
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            except (ProcessLookupError, OSError):
+                pass
+            try:
+                proc.communicate(timeout=5)
+            except subprocess.TimeoutExpired:
+                pass
             return {
                 "returncode": -1,
                 "stdout": "",
@@ -199,8 +239,8 @@ def _execute(tool, cmd, input_text: str) -> dict:
             }
         return {
             "returncode": proc.returncode,
-            "stdout": proc.stdout,
-            "stderr": proc.stderr,
+            "stdout": stdout,
+            "stderr": stderr,
         }
     finally:
         try:

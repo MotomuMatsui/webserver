@@ -98,6 +98,7 @@ RUN set -eux; \
 COPY app.py tools.py viz.py ./
 COPY templates/ ./templates/
 COPY static/ ./static/
+COPY samples/ ./samples/
 
 EXPOSE 8000
 
@@ -105,6 +106,8 @@ CMD ["gunicorn", \
      "--workers", "2", \
      "--bind", "0.0.0.0:8000", \
      "--timeout", "600", \
+     "--max-requests", "200", \
+     "--max-requests-jitter", "20", \
      "--access-logfile", "-", \
      "--error-logfile", "-", \
      "app:app"]

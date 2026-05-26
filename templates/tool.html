@@ -10,8 +10,34 @@
 
 <form method="post" class="tool-form">
   <label for="input">Input data</label>
-  {% if tool.input_help %}<div class="note">{{ tool.input_help }}</div>{% endif %}
+  {% if tool.input_help or tool.samples %}
+  <div class="note">
+    {{ tool.input_help }}
+    {% for s in tool.samples %}
+      <a href="#" class="sample-link"
+         data-sample-url="{{ url_for('tool_sample', slug=tool.slug, index=loop.index0) }}"
+      >({{ s.label }})</a>
+    {% endfor %}
+  </div>
+  {% endif %}
   <textarea id="input" name="input" required>{{ input_text }}</textarea>
+  <script>
+    (function () {
+      var ta = document.getElementById("input");
+      document.querySelectorAll(".sample-link").forEach(function (a) {
+        a.addEventListener("click", function (ev) {
+          ev.preventDefault();
+          fetch(a.dataset.sampleUrl)
+            .then(function (r) {
+              if (!r.ok) throw new Error("HTTP " + r.status);
+              return r.text();
+            })
+            .then(function (text) { ta.value = text; })
+            .catch(function (err) { alert("Sample fetch failed: " + err.message); });
+        });
+      });
+    })();
+  </script>
 
   {% if tool.fields %}
   <div class="fields">
